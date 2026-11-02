@@ -255,5 +255,10 @@ spec:
           emptyDir:
             sizeLimit: 128Mi
       nodeSelector:
-        kubernetes.io/hostname: openmediavault
+        kubernetes.io/hostname: redqueen
+      tolerations:
+        - key: ai.mousses.xyz/inference
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
       terminationGracePeriodSeconds: 90
