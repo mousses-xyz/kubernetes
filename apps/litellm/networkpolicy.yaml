@@ -168,6 +168,15 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    # k3s does not match pod selectors for traffic that crosses nodes, so a
+    # gateway on redqueen needs a literal destination instead. The OMV pod CIDR
+    # is stable per node; postgres-0's own address is not.
+    - to:
+        - ipBlock:
+            cidr: 10.42.0.0/24
+      ports:
+        - protocol: TCP
+          port: 5432
     - to:
         - ipBlock:
             cidr: 10.9.20.242/32
@@ -223,6 +232,15 @@ spec:
             matchLabels:
               app.kubernetes.io/name: litellm
               app.kubernetes.io/component: migrations
+      ports:
+        - protocol: TCP
+          port: 5432
+    # As above: a gateway running on redqueen is invisible to the selectors
+    # above, so admit redqueen's pod subnet instead. Reaching this port still
+    # requires an egress permission, which today only the gateway holds.
+    - from:
+        - ipBlock:
+            cidr: 10.42.1.0/24
       ports:
         - protocol: TCP
           port: 5432
