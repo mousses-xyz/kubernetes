@@ -265,7 +265,7 @@ class RedqueenReliability(CustomLogger):
             return kwargs
         await install_http_clients()
         enforce_policy(kwargs)
-        # 1.104.2's image provider drops max_retries then defaults to 2; its
+        # The pinned image's provider drops max_retries then defaults to 2; its
         # embedding provider treats 0 as absent. A supplied SDK client keeps
         # those provider defaults from re-enabling retries (including network
         # failures). The actual HTTPX pool is shared, not recreated per call.

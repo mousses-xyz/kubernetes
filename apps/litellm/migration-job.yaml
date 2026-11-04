@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: litellm-migrations-v1-104-2
+  name: litellm-migrations-v1-108-0
   namespace: litellm
   labels:
     app.kubernetes.io/name: litellm
     app.kubernetes.io/component: migrations
     app.kubernetes.io/part-of: litellm
-    app.kubernetes.io/version: 1.104.2
+    app.kubernetes.io/version: 1.108.0
 spec:
   # Retain the first failed Pod so its logs survive and the operator can
   # diagnose the cause.
@@ -19,7 +19,7 @@ spec:
         app.kubernetes.io/name: litellm
         app.kubernetes.io/component: migrations
         app.kubernetes.io/part-of: litellm
-        app.kubernetes.io/version: 1.104.2
+        app.kubernetes.io/version: 1.108.0
     spec:
       automountServiceAccountToken: false
       restartPolicy: Never
@@ -84,8 +84,8 @@ spec:
               type: RuntimeDefault
       containers:
         - name: migrations
-          # ghcr.io/berriai/litellm-migrations:v1.104.2; pinned GHCR OCI index digest.
-          image: ghcr.io/berriai/litellm-migrations@sha256:35c0d71472914586ad683fa853403509b8a57a9975c0d1bc5d02b4adebfed91d
+          # ghcr.io/berriai/litellm-migrations:v1.108.0; pinned GHCR OCI index digest.
+          image: ghcr.io/berriai/litellm-migrations@sha256:34b56043663c3612513f7a56ce6291a9b5ba60db9378427afe0fb45cd3dfe3ab
           imagePullPolicy: IfNotPresent
           env:
             - name: DATABASE_URL

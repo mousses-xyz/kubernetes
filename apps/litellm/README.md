@@ -42,12 +42,12 @@ dead backend.
 
 the gateway makes one upstream attempt. caller retry, fallback and timeout
 overrides cannot change this policy. router cooldowns are disabled: a capacity
-503 must not poison the model's next request. LiteLLM 1.104.2's image and
+503 must not poison the model's next request. LiteLLM 1.108.0's image and
 embedding providers can restore SDK retries despite `max_retries: 0`; the
 supported custom client and deployment callback enforce zero retries at that
 boundary. the startup wrapper checks the exact LiteLLM/OpenAI/HTTPX versions
-before starting the upstream CLI. see the pinned [provider source](https://github.com/BerriAI/litellm/blob/v1.104.2/litellm/llms/openai/openai.py)
-and [callback interface](https://github.com/BerriAI/litellm/blob/v1.104.2/litellm/integrations/custom_logger.py).
+before starting the upstream CLI. see the pinned [provider source](https://github.com/BerriAI/litellm/blob/v1.108.0/litellm/llms/openai/openai.py)
+and [callback interface](https://github.com/BerriAI/litellm/blob/v1.108.0/litellm/integrations/custom_logger.py).
 
 the application limits active requests to four before reading their bodies;
 all approved public paths use one Traefik router, so its shared admission limit
@@ -250,8 +250,8 @@ config is deployed, authenticated `GET /v1/models` returns them to keys whose
 model scopes include them. the
 provider/model table in LiteLLM's docs is a support catalog; it does not
 automatically add models to this proxy. see LiteLLM's [Decisions API
-documentation](https://docs.litellm.ai/docs/decisions) and [v1.104.2 release
-notes](https://docs.litellm.ai/release_notes/v1.104.2/v1-104-2).
+documentation](https://docs.litellm.ai/docs/decisions) and the [v1.108.0
+release](https://github.com/BerriAI/litellm/releases/tag/v1.108.0).
 
 the native OpenAI-format `/v1/decisions` route accepts `input_image` parts for
 the four local Clef models. Redqueen rejects remote image URLs, validates
