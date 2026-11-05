@@ -39,7 +39,7 @@ def main():
     from redqueen_reliability import INFERENCE_TIMEOUT, NoRetryOpenAI
     versions = {name: importlib.metadata.version(name) for name in ("litellm", "openai", "httpx")}
     print("versions:", versions)
-    assert versions == {"litellm": "1.104.2", "openai": "2.33.0", "httpx": "0.28.1"}
+    assert versions == {"litellm": "1.108.0", "openai": "2.33.0", "httpx": "0.28.1"}
     command = Path("/proc/1/cmdline").read_bytes()
     assert b"redqueen_gateway.py" in command, "gateway policy entrypoint is not running"
     config = yaml.safe_load(Path("/etc/litellm/config.yaml").read_text())

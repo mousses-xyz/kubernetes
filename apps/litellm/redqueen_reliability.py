@@ -32,7 +32,8 @@ MAX_JSON_MARKERS = 250_000
 UPLOAD_TIMEOUT = 60
 REQUEST_STATE = contextvars.ContextVar("redqueen_request_state", default=None)
 MODELS = frozenset({
-    "qwen3.8-27b", "gemma-4-e4b-it", "gemma-4-12b-it",
+    "qwen3.8-27b", "deepseek-v4.1-flash-1017-unsloth",
+    "gemma-4-e4b-it", "gemma-4-12b-it",
     "gemma-4-26b-a4b-it", "qwen3.6-35b-a3b", "glm-5.3-flash-abliterated",
     "embeddinggemma-2", "qwen-image-2.1", "qwen-image-2.1-uncensored",
     "jevk5-4b-v0.3", "clm-v0.1-8b", "clef-flash-bf16", "clef-flash-q8",
@@ -264,7 +265,7 @@ class RedqueenReliability(CustomLogger):
             return kwargs
         await install_http_clients()
         enforce_policy(kwargs)
-        # 1.104.2's image provider drops max_retries then defaults to 2; its
+        # The pinned image's provider drops max_retries then defaults to 2; its
         # embedding provider treats 0 as absent. A supplied SDK client keeps
         # those provider defaults from re-enabling retries (including network
         # failures). The actual HTTPX pool is shared, not recreated per call.

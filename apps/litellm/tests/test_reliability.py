@@ -34,7 +34,7 @@ MODEL = "qwen3.8-27b"
 
 class GatewayContracts(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.assertEqual(importlib.metadata.version("litellm"), "1.104.2")
+        self.assertEqual(importlib.metadata.version("litellm"), "1.108.0")
         self.assertEqual(importlib.metadata.version("openai"), "2.33.0")
         self.assertEqual(importlib.metadata.version("httpx"), "0.28.1")
         self.attempts = 0

@@ -29,8 +29,8 @@ if run_deploy failed "${failure_log}" >"${scratch}/failed.out" 2>"${scratch}/fai
   printf 'deploy unexpectedly succeeded after a failed migration\n' >&2
   exit 1
 fi
-grep -Fq 'logs -l job-name=litellm-migrations-v1-104-2' "${failure_log}"
-grep -Fq 'describe job/litellm-migrations-v1-104-2' "${failure_log}"
+grep -Fq 'logs -l job-name=litellm-migrations-v1-108-0' "${failure_log}"
+grep -Fq 'describe job/litellm-migrations-v1-108-0' "${failure_log}"
 if grep -Fq "apply -k ${app_root}" "${failure_log}"; then
   printf 'gateway manifests were applied after a failed migration\n' >&2
   exit 1
@@ -57,7 +57,7 @@ grep -Fq 'backoffLimit: 0' "${app_root}/migration-job.yaml"
 grep -Fq 'restartPolicy: Never' "${app_root}/migration-job.yaml"
 grep -Fq 'runAsUser: 65532' "${app_root}/migration-job.yaml"
 grep -Fq 'name: DATABASE_URL' "${app_root}/migration-job.yaml"
-grep -Fq 'ghcr.io/berriai/litellm-migrations@sha256:35c0d71472914586ad683fa853403509b8a57a9975c0d1bc5d02b4adebfed91d' \
+grep -Fq 'ghcr.io/berriai/litellm-migrations@sha256:34b56043663c3612513f7a56ce6291a9b5ba60db9378427afe0fb45cd3dfe3ab' \
   "${app_root}/migration-job.yaml"
 if grep -Eq '^[[:space:]]+envFrom:' "${app_root}/migration-job.yaml"; then
   printf 'migration Job receives secrets it does not need\n' >&2
@@ -144,6 +144,7 @@ grep -Fq 'port: 8191' "${app_root}/networkpolicy.yaml"
 
 readonly -a configured_models=(
   qwen3.8-27b
+  deepseek-v4.1-flash-1017-unsloth
   gemma-4-e4b-it
   gemma-4-12b-it
   gemma-4-26b-a4b-it
@@ -182,7 +183,30 @@ for reasoning_contract in \
   fi
 done
 if grep -Fq 'model_name: deepseek-v4.1-flash-q2' "${app_root}/configmap.yaml"; then
-  printf 'DeepSeek must not be registered before its weights are available\n' >&2
+  printf 'the retired DeepSeek Q2 alias must not be registered\n' >&2
+  exit 1
+fi
+deepseek_model_config="$(awk '
+  /^      - model_name: deepseek-v4[.]1-flash-1017-unsloth$/ { capture = 1 }
+  capture && /^      - model_name:/ && $0 !~ /deepseek-v4[.]1-flash-1017-unsloth/ { exit }
+  capture { print }
+' "${app_root}/configmap.yaml")"
+for deepseek_contract in \
+  '          model: openai/deepseek-v4.1-flash-1017-unsloth' \
+  '          api_base: http://qwen-redqueen:8081/v1' \
+  '          api_key: os.environ/QWEN_API_KEY' \
+  '          max_retries: 0' \
+  '          input_cost_per_token: 0.0000003' \
+  '          output_cost_per_token: 0.0000012' \
+  '          max_input_tokens: 220000'; do
+  if ! grep -Fq -- "${deepseek_contract}" <<<"${deepseek_model_config}"; then
+    printf 'DeepSeek LiteLLM entry is missing contract: %s\n' \
+      "${deepseek_contract}" >&2
+    exit 1
+  fi
+done
+if grep -Eq '^      - model_name: deepseek-v4[.]1-flash-1017$' "${app_root}/configmap.yaml"; then
+  printf 'the ambiguous pre-quantized DeepSeek alias must not be registered\n' >&2
   exit 1
 fi
 grep -Fq '      store_model_in_db: false' "${app_root}/configmap.yaml"
@@ -198,8 +222,8 @@ for priced_openai_model in \
     exit 1
   fi
 done
-if [[ "$(grep -Fc 'api_base: http://qwen-redqueen:8081/v1' "${app_root}/configmap.yaml")" -ne 7 ]]; then
-  printf 'all six chat aliases and EmbeddingGemma must use the shared redqueen text endpoint\n' >&2
+if [[ "$(grep -Fc 'api_base: http://qwen-redqueen:8081/v1' "${app_root}/configmap.yaml")" -ne 8 ]]; then
+  printf 'all seven chat aliases and EmbeddingGemma must use the shared redqueen text endpoint\n' >&2
   exit 1
 fi
 if [[ "$(grep -Fc 'api_base: http://qwen-image-redqueen:8190/v1' "${app_root}/configmap.yaml")" -ne 2 ]]; then

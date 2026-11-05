@@ -10,7 +10,7 @@ from redqueen_reliability import RedqueenErrors
 def install_boundary():
     # The hook and error contract is tested against this exact release. Fail
     # closed on an upgrade until the same provider/proxy contracts pass again.
-    for package, expected in (("litellm", "1.104.2"), ("openai", "2.33.0"), ("httpx", "0.28.1")):
+    for package, expected in (("litellm", "1.108.0"), ("openai", "2.33.0"), ("httpx", "0.28.1")):
         if importlib.metadata.version(package) != expected:
             raise RuntimeError(f"redqueen gateway policy requires {package} {expected}")
     from litellm.proxy.proxy_server import app
