@@ -1,0 +1,134 @@
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: monitoring-tools-lan-only
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: monitoring
+spec:
+  ipAllowList:
+    sourceRange:
+      - 10.9.20.0/24
+      # Homepage performs its site-monitor requests from the cluster pod CIDR.
+      - 10.42.0.0/16
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: monitoring
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Monitoring
+    gethomepage.dev/name: Prometheus
+    gethomepage.dev/icon: si-prometheus
+    gethomepage.dev/href: https://prometheus.omv.mousses.xyz
+    gethomepage.dev/description: Metrics, queries, and scrape targets
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`prometheus.omv.mousses.xyz`)
+      middlewares:
+        - name: monitoring-tools-lan-only
+        - name: security-headers
+      services:
+        - name: kube-prometheus-stack-prometheus
+          port: 9090
+  tls:
+    secretName: monitoring-tools-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/part-of: monitoring
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Monitoring
+    gethomepage.dev/name: Alertmanager
+    gethomepage.dev/icon: mdi-bell-alert
+    gethomepage.dev/href: https://alertmanager.omv.mousses.xyz
+    gethomepage.dev/description: Alert routing, silences, and notifications
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`alertmanager.omv.mousses.xyz`)
+      middlewares:
+        - name: monitoring-tools-lan-only
+        - name: security-headers
+      services:
+        - name: kube-prometheus-stack-alertmanager
+          port: 9093
+  tls:
+    secretName: monitoring-tools-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loki
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: monitoring
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Monitoring
+    gethomepage.dev/name: Loki
+    gethomepage.dev/icon: mdi-database-search
+    gethomepage.dev/href: https://loki.omv.mousses.xyz/ready
+    gethomepage.dev/description: Log store readiness; query in Grafana
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`loki.omv.mousses.xyz`)
+      middlewares:
+        - name: monitoring-tools-lan-only
+        - name: security-headers
+      services:
+        - name: loki-gateway
+          port: 80
+  tls:
+    secretName: monitoring-tools-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: alloy
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: monitoring
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Monitoring
+    gethomepage.dev/name: Alloy
+    gethomepage.dev/icon: mdi-console
+    gethomepage.dev/href: https://alloy.omv.mousses.xyz
+    gethomepage.dev/description: Log collection pipeline and debug UI
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`alloy.omv.mousses.xyz`)
+      middlewares:
+        - name: monitoring-tools-lan-only
+        - name: security-headers
+      services:
+        - name: alloy
+          port: 12345
+  tls:
+    secretName: monitoring-tools-tls

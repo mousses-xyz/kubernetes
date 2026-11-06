@@ -78,7 +78,7 @@ Ordered from the fewest to the most exceptions from default deny. This ranks pol
 | 2 | IT-Tools, Kiwix, OpenSpeedTest, QR Code Generator, Text2Shop | baseline | Traefik ingress only |
 | 3 | Board Games, Cloudflare, Crafty, Homepage, Jellyfin, n8n, Syncthing, Vaultwarden | baseline | custom ingress and/or egress, including app-local DNS where needed |
 | 4 | Immich, LibreChat, Paperless-ngx, SearXNG | baseline + DNS egress | custom ingress, egress, and component flows |
-| 5 | Monitoring | baseline + DNS egress | same-namespace stack traffic, Kubernetes API and kubelet metrics, Traefik → Grafana |
+| 5 | Monitoring | baseline + DNS egress | same-namespace stack traffic, Kubernetes API and kubelet metrics, Traefik → Grafana, and LAN-only Traefik routes for Prometheus, Alertmanager, Loki, and Alloy |
 | 6 | Rancher | none | no rendered NetworkPolicy; networking is delegated to Helm-generated resources |
 
 No app currently has a custom rendered NetworkPolicy without the shared baseline. Rancher is unclassified at the policy layer rather than an intentional unrestricted custom profile.
@@ -122,7 +122,7 @@ The Prometheus Community chart installs Prometheus Operator, Prometheus, Alertma
 
 Loki runs as one filesystem-backed monolithic instance with seven-day retention. Grafana receives a Loki datasource through the internal `loki-gateway` Service. Alloy runs as one deployment with cluster-wide read access to Kubernetes pod logs and events, labels streams with namespace, pod, container, app, job, and cluster, and writes them to Loki ([10], [11]). Promtail is intentionally not used because it is end-of-life.
 
-The monitoring policy keeps the shared default deny and DNS profile. Its local rules allow monitoring components to communicate within their namespace, reach the Kubernetes API, let Prometheus reach the node kubelet metrics endpoint, let the Prometheus admission webhook receive API-server traffic, and let Traefik reach Grafana. Application-specific metrics endpoints still need an app-local ingress rule when they are added.
+The monitoring policy keeps the shared default deny and DNS profile. Its local rules allow monitoring components to communicate within their namespace, reach the Kubernetes API, let Prometheus reach the node kubelet metrics endpoint, let the Prometheus admission webhook receive API-server traffic, let Traefik reach Grafana, and let Traefik reach the LAN-only Prometheus, Alertmanager, Loki, and Alloy routes. Those tool routes allow only the LAN and cluster pod CIDRs; they are not public. Application-specific metrics endpoints still need an app-local ingress rule when they are added.
 
 ## namespace handling
 
