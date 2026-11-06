@@ -146,3 +146,33 @@ spec:
       ports:
         - protocol: TCP
           port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-tools-traefik-ingress
+  namespace: monitoring
+spec:
+  # Traefik terminates the LAN-only monitoring tool routes. Keep the pod
+  # selector broad so Helm-generated pod labels do not have to be duplicated;
+  # the source and ports remain restricted.
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+      ports:
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 9093
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 12345

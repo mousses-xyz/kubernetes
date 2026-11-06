@@ -8,6 +8,12 @@ metadata:
     app.kubernetes.io/part-of: monitoring
   annotations:
     traefik.ingress.kubernetes.io/router.middlewares: monitoring-security-headers@kubernetescrd
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: Monitoring
+    gethomepage.dev/name: Grafana
+    gethomepage.dev/icon: si-grafana
+    gethomepage.dev/href: https://grafana.omv.mousses.xyz
+    gethomepage.dev/description: Dashboards, Explore, and alerting
 spec:
   ingressClassName: traefik
   tls:

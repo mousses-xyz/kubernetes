@@ -7,6 +7,13 @@ metadata:
     app.kubernetes.io/name: litellm
     app.kubernetes.io/component: gateway
     app.kubernetes.io/part-of: litellm
+  annotations:
+    gethomepage.dev/enabled: "true"
+    gethomepage.dev/group: AI
+    gethomepage.dev/name: LiteLLM Admin
+    gethomepage.dev/icon: mdi-api
+    gethomepage.dev/href: https://admin.ai.omv.mousses.xyz
+    gethomepage.dev/description: Model gateway admin, keys, and usage
 spec:
   entryPoints:
     - websecure

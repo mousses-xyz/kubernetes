@@ -8,7 +8,9 @@ resources:
   - helmchart-loki.yaml
   - helmchart-alloy.yaml
   - certificate.yaml
+  - certificate-tools.yaml
   - ingress.yaml
+  - ingress-tools.yaml
   - ../_shared/ingress-security
   - ../_shared/network-policy/baseline
   - ../_shared/network-policy/dns-egress
