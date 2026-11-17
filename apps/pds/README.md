@@ -138,11 +138,12 @@ The first copy is not the consistent copy. It only reduces the final delta.
 
 ### 2. Stop the old PDS
 
-On the PDS VM:
+On the PDS VM, stop Watchtower first so it cannot update the PDS container
+during the migration, then stop the PDS and Caddy:
 
 ```bash
-sudo systemctl stop pds
-# or: sudo docker compose stop
+sudo docker stop watchtower
+sudo docker compose -f /pds/compose.yaml stop pds caddy
 ```
 
 Confirm nothing is listening on 3000 or 443.
