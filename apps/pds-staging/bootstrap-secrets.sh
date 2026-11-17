@@ -56,7 +56,8 @@ PDS_CRAWLERS=
 PDS_SERVICE_HANDLE_DOMAINS=.pds-staging.mousses.xyz
 PDS_INVITE_REQUIRED=false
 PDS_RATE_LIMITS_ENABLED=false
-PDS_EMAIL_FROM_ADDRESS=pds-staging@mousses.xyz
+# PDS requires both emailFromAddress and emailSmtpUrl, or neither.
+# Staging intentionally configures neither.
 LOG_ENABLED=true
 PDS_JWT_SECRET=${jwt_secret}
 PDS_ADMIN_PASSWORD=${admin_password}
