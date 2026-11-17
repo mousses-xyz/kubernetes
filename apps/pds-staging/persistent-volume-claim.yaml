@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pds-staging-data
+  namespace: pds-staging
+  labels:
+    app.kubernetes.io/name: pds-staging
+    app.kubernetes.io/part-of: pds-staging
+spec:
+  accessModes:
+    - ReadWriteOncePod
+  storageClassName: pds-staging-local
+  volumeName: pds-staging-data
+  resources:
+    requests:
+      storage: 5Gi

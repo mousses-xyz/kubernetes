@@ -235,8 +235,9 @@ websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=
 
 ## Phase 2 staging
 
-Create a temporary staging app with the same manifests but independent identity
-and storage. Do not reuse production secrets or the production PVC.
+Phase 2 is implemented in [`apps/pds-staging/`](../pds-staging/README.md). It
+uses independent identity, storage, and credentials. Do not reuse production
+secrets or the production PVC.
 
 Suggested staging values:
 

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pds-staging
+  namespace: pds-staging
+  labels:
+    app.kubernetes.io/name: pds-staging
+    app.kubernetes.io/part-of: pds-staging
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: pds-staging
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
