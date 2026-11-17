@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: pds
+  namespace: pds
+  labels:
+    app.kubernetes.io/name: pds
+    app.kubernetes.io/part-of: pds
+spec:
+  secretName: pds-tls
+  dnsNames:
+    - bluesky.mousses.xyz
+    - "*.bluesky.mousses.xyz"
+  issuerRef:
+    name: letsencrypt-production-cloudflare
+    kind: ClusterIssuer
+    group: cert-manager.io
