@@ -44,22 +44,23 @@ curl --resolve pds-staging.mousses.xyz:443:10.9.20.14 \
   https://pds-staging.mousses.xyz/xrpc/com.atproto.server.describeServer
 ```
 
-Create a test account. `PDS_INVITE_REQUIRED=false`, so no invite code is needed.
-Do **not** send the admin basic-auth credentials to `createAccount`; those are
-only for `com.atproto.admin.*` and invite-code endpoints.
+Create a test account with a non-reserved handle. `test` is reserved by the PDS.
+`PDS_INVITE_REQUIRED=false`, so no invite code is needed. Do **not** send the
+admin basic-auth credentials to `createAccount`; those are only for
+`com.atproto.admin.*` and invite-code endpoints.
 
 ```bash
 curl --resolve pds-staging.mousses.xyz:443:10.9.20.14 \
   -H 'Content-Type: application/json' \
-  -d '{"email":"staging@mousses.xyz","handle":"test.pds-staging.mousses.xyz","password":"staging-test-password"}' \
+  -d '{"email":"staging@mousses.xyz","handle":"alice.pds-staging.mousses.xyz","password":"staging-test-password"}' \
   https://pds-staging.mousses.xyz/xrpc/com.atproto.server.createAccount
 ```
 
 Verify wildcard routing:
 
 ```bash
-curl --resolve test.pds-staging.mousses.xyz:443:10.9.20.14 \
-  https://test.pds-staging.mousses.xyz/.well-known/atproto-did
+curl --resolve alice.pds-staging.mousses.xyz:443:10.9.20.14 \
+  https://alice.pds-staging.mousses.xyz/.well-known/atproto-did
 ```
 
 For WebSocket testing, add a temporary local DNS record for
