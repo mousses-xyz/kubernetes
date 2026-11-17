@@ -44,17 +44,12 @@ curl --resolve pds-staging.mousses.xyz:443:10.9.20.14 \
   https://pds-staging.mousses.xyz/xrpc/com.atproto.server.describeServer
 ```
 
-Create a test account with the admin API. `PDS_INVITE_REQUIRED=false`, so no
-invite code is needed:
+Create a test account. `PDS_INVITE_REQUIRED=false`, so no invite code is needed.
+Do **not** send the admin basic-auth credentials to `createAccount`; those are
+only for `com.atproto.admin.*` and invite-code endpoints.
 
 ```bash
-ADMIN_PASSWORD="$(
-  kubectl -n pds-staging get secret pds-staging-env \
-    -o jsonpath='{.data.PDS_ADMIN_PASSWORD}' | base64 -d
-)"
-
 curl --resolve pds-staging.mousses.xyz:443:10.9.20.14 \
-  -u "admin:${ADMIN_PASSWORD}" \
   -H 'Content-Type: application/json' \
   -d '{"email":"staging@mousses.xyz","handle":"test.pds-staging.mousses.xyz","password":"staging-test-password"}' \
   https://pds-staging.mousses.xyz/xrpc/com.atproto.server.createAccount
