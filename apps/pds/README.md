@@ -17,6 +17,8 @@ Current production facts:
 - handle domain `.bluesky.mousses.xyz`
 - blob upload limit 50 MB
 - PDS data lives under `/pds`: SQLite databases, `actors/`, and `blocks/`
+- current `/pds` size is about **171 MB**; the 64 GiB PV is headroom for future
+  blobs and repository growth
 
 ## Architecture
 
@@ -59,18 +61,44 @@ Create the PV directory on OMV:
 sudo install -d -o 1000 -g 1000 -m 0700 /filesystem/k3s/data/pds
 ```
 
-## Install the paused production app
+## Source VM layout
 
-Copy the existing PDS env file to a protected location on the machine that has
-`kubectl`, then create the Secret:
+On the Proxmox VM (`pds@10.9.20.12`):
+
+- data and config: `/pds`
+- env file: `/pds/pds.env`
+- compose file: `/pds/compose.yaml`
+- containers: `pds`, `caddy`, `watchtower`
+- there is no `pds.service` systemd unit; the stack is Docker Compose
+
+Do **not** import `/pds/pds.env` directly. The raw file contains a Compose
+interpolation such as `PDS_EMAIL_FROM_ADDRESS=$GMAIL_USERNAME@gmail.com`; the
+running container has the resolved value. Capture the effective environment
+from the container instead:
 
 ```bash
-PDS_ENV_FILE=/secure/pds.env ./apps/pds/bootstrap-secrets.sh
+umask 077
+ssh pds@10.9.20.12 \
+  "docker exec pds env | grep -E '^(PDS_|LOG_ENABLED=|TZ=)'" \
+  > ~/pds.env
+chmod 600 ~/pds.env
 ```
 
-The script imports the existing env exactly (including non-secret values) as
-`pds/pds-env`. It refuses to overwrite an existing Secret, validates the PDS
-hostname, data paths, and PLC key format, and forces `PDS_PORT=3000`.
+This writes the secrets only to the machine that has `kubectl`. Do not paste the
+file contents into chat or commit it.
+
+## Install the paused production app
+
+Create the Secret from the effective env file:
+
+```bash
+PDS_ENV_FILE=~/pds.env ./apps/pds/bootstrap-secrets.sh
+rm -f ~/pds.env
+```
+
+The script imports the effective env as `pds/pds-env`. It refuses to overwrite
+an existing Secret, validates the PDS hostname, data paths, PLC key format, and
+rejects unresolved `$VAR` values, then forces `PDS_PORT=3000`.
 
 Then apply the app:
 

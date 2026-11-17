@@ -14,7 +14,7 @@ fi
 
 if [[ ! -r "${env_file}" ]]; then
   printf 'PDS env file not readable: %s\n' "${env_file}" >&2
-  printf 'Set PDS_ENV_FILE to a protected copy of the PDS /pds/pds.env file.\n' >&2
+  printf 'Set PDS_ENV_FILE to the effective PDS environment captured from the running container.\n' >&2
   exit 1
 fi
 
@@ -74,6 +74,26 @@ if [[ "${blob_dir}" != "/pds/blocks" ]]; then
   printf 'PDS_BLOBSTORE_DISK_LOCATION is %q, expected /pds/blocks\n' "${blob_dir}" >&2
   exit 1
 fi
+
+for key in \
+  PDS_HOSTNAME \
+  PDS_DATA_DIRECTORY \
+  PDS_BLOBSTORE_DISK_LOCATION \
+  PDS_SERVICE_HANDLE_DOMAINS \
+  PDS_CRAWLERS \
+  PDS_DID_PLC_URL \
+  PDS_BSKY_APP_VIEW_URL \
+  PDS_REPORT_SERVICE_URL \
+  PDS_EMAIL_FROM_ADDRESS \
+  PDS_CONTACT_EMAIL_ADDRESS; do
+  value="$(get_value "${key}")"
+  if [[ "${value}" == *'$'* ]]; then
+    printf '%s contains an unresolved shell variable.\n' "${key}" >&2
+    printf 'Capture the running container environment instead of the raw pds.env:\n' >&2
+    printf '  ssh pds@10.9.20.12 "docker exec pds env | grep -E '"'"'^(PDS_|LOG_ENABLED=|TZ=)'"'"'" > ~/pds.env\n' >&2
+    exit 1
+  fi
+done
 
 plc_key="$(get_value PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX)"
 if [[ ! "${plc_key}" =~ ^[0-9a-fA-F]{64}$ ]]; then
