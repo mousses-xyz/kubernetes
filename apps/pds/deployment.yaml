@@ -7,9 +7,9 @@ metadata:
     app.kubernetes.io/name: pds
     app.kubernetes.io/part-of: pds
 spec:
-  # Keep the production PDS stopped until /pds has been copied into the PVC.
-  # The cutover step scales this to 1.
-  replicas: 0
+  # The production data cutover is complete. Keep one replica; the old VM is
+  # retained only for rollback until the post-cutover verification window ends.
+  replicas: 1
   strategy:
     type: Recreate
   revisionHistoryLimit: 2

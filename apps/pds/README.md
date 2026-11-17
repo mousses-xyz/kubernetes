@@ -5,9 +5,10 @@ Bluesky Personal Data Server, migrated from Proxmox VM `104` to k3s on
 
 ## Status
 
-Phase 1: manifests only. The production Deployment is intentionally created
-with `replicas: 0` so an empty PDS cannot start before the VM data has been
-copied into the PVC.
+Production data cutover is in progress. The Deployment runs one replica on the
+copied PVC; the old VM is stopped and retained for rollback until public and
+relay verification is complete. `replicas` is now `1`, so re-applying the app
+will not scale it back down.
 
 Current production facts:
 
