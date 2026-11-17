@@ -5,7 +5,7 @@ umask 0077
 readonly namespace=pds-staging
 readonly secret_name=pds-staging-env
 
-for command in kubectl openssl xxd; do
+for command in kubectl openssl od; do
   if ! command -v "${command}" >/dev/null 2>&1; then
     printf 'required command not found: %s\n' "${command}" >&2
     exit 1
@@ -26,7 +26,8 @@ plc_key="$(
   openssl ecparam --name secp256k1 --genkey --noout --outform DER \
     | tail --bytes=+8 \
     | head --bytes=32 \
-    | xxd --plain --cols 32
+    | od -An -tx1 -v \
+    | tr -d ' \n'
 )"
 
 if [[ ! "${plc_key}" =~ ^[0-9a-fA-F]{64}$ ]]; then
