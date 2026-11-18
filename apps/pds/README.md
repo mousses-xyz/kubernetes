@@ -280,11 +280,139 @@ and a WebSocket firehose connection before touching production.
 
 ## Backups
 
-Not implemented in Phase 1. The PDS data is SQLite plus content-addressed
-blobs, so a raw live copy is not a consistent backup. Phase 6 should add either:
+The PDS backup is implemented in `apps/pds/backups/` and
+`scripts/backups/{prepare,backup,restore,daily,recovery,install-pds-schedule}-pds.py`.
+It follows the namespace backup pattern: an in-cluster HTTPS Restic REST
+server, a local VolSync staging PVC, verified snapshots with `7d` retention, and
+an age-encrypted recovery export kept off OMV.
 
-- a quiesced PVC snapshot (scale to 0, VolSync/Restic, scale back to 1), or
-- online `sqlite3 .backup` for `account.sqlite`, `sequencer.sqlite`,
-  `did_cache.sqlite`, and `actors/` plus a blob sync.
+### Consistency model
+
+A live copy of SQLite is not a consistent backup. Each run:
+
+1. captures the PDS service identity, health, and repository list;
+2. stores a quiescence journal and scales `deployment/pds` to `0`;
+3. archives `/filesystem/k3s/data/pds` (SQLite databases, `actors/`, `blocks/`),
+   recording per-file SHA-256, numeric ownership, and SQLite
+   `PRAGMA integrity_check` results;
+4. restarts the PDS, waits for readiness, and verifies the writer resumed;
+5. publishes and uploads the immutable artifact set through VolSync, then
+   verifies the snapshot and every checksum from a separate Job.
+
+Artifacts are `data.tar`, `contents.json`, `application.json`,
+`application-config.json`, `application-secret.json`, `sqlite-integrity.json`,
+`metadata.json`, `backup-id`, and `SHA256SUMS`. The daily run is at
+**06:00 Arizona / 13:00 UTC**, after the other namespace backups. Downtime is
+one PDS writer stop/start per run.
+
+### Storage layout
+
+- Restic repository: `/filesystem/k3s/data/pds-backups/backups`
+- VolSync staging: `/filesystem/k3s/data/pds-backups/backup-staging/pds-data`
+- Isolated restore scratch:
+  `/filesystem/k3s/data/pds-backups/restore-validation/pds-data/initial`
+- Private recovery evidence: `/root/k3s-backup-recovery/pds`
+
+The live path is `/filesystem/k3s/data/pds`; backup paths are siblings, so a
+Restic repository never nests inside the live data directory.
+
+### One-time setup
+
+Run on OMV from a verified checkout of this repository at a full commit hash:
+
+```bash
+sudo python3 scripts/backups/prepare-pds.py
+```
+
+This creates the array directories, Restic TLS/auth credentials,
+`restic-pds-data`, the `restic-repositories` and `data-backup-staging` PVCs,
+applies the backup kustomization, and verifies DNS, TLS, and authentication with
+a Job. Credentials are written only under `/root/k3s-backup-recovery/pds`.
+
+### Initial backup and restore test
+
+The initial backup performs a full quiesced capture and upload. Its verification
+Job checks the snapshot, every artifact checksum, and exercises `--keep-within 7d`
+pruning in a scratch repository:
+
+```bash
+sudo python3 scripts/backups/backup-pds.py
+```
+
+Do **not** decommission VM `104` until the restore test passes. The restore test
+restores the initial snapshot into isolated scratch PVCs, never the live claim.
+It validates SQLite integrity, blob checksums, and captured ownership, then
+starts an isolated no-network PDS and compares health, service DID, and the
+repository list:
+
+```bash
+sudo python3 scripts/backups/restore-pds.py
+```
+
+The validation Job runs as root only because `data.tar` preserves UID/GID
+`1000:1000`; it has no network access and writes only to isolated scratch paths.
+The smoke Deployment runs as `1000:1000`, forces `PDS_CRAWLERS` empty, requests
+less CPU/memory than production so it can schedule beside the live PDS, and is
+scaled back to zero when the test finishes. The `pds` namespace Pod Security
+labels are audit/warn only, so the root Job is admitted; do not add enforce
+labels without revisiting this design.
+
+### Daily schedule
+
+After the initial backup and restore test pass:
+
+```bash
+sudo python3 scripts/backups/install-pds-schedule.py --revision <full-40-char-commit>
+```
+
+The installer verifies the saved evidence, installs an immutable runtime under
+`/usr/local/lib/k3s-backups/pds/<commit>`, installs
+`k3s-pds-backup.timer` and `k3s-pds-backup-recovery.service`, runs the first
+daily sequence and retention proof, and only then enables the timer. The
+recovery unit resumes a PDS writer left scaled down by an interrupted run.
+
+```bash
+systemctl list-timers k3s-pds-backup.timer --all
+journalctl -u k3s-pds-backup.service -n 100 --no-pager
+```
+
+### Off-OMV recovery copy
+
+Export the latest verified generation through age and keep the encrypted file
+independent of OMV, matching the other namespace recovery exports. Keep the age
+private key off OMV and off the cluster:
+
+```bash
+umask 077
+sudo sh -c 'python3 scripts/backups/recovery-pds.py export --recipient age1... \
+  | age --encrypt --recipient age1... --output /root/k3s-backup-recovery/pds/recovery.tar.age'
+sha256sum /root/k3s-backup-recovery/pds/recovery.tar.age
+```
+
+Copy the encrypted file and its SHA-256 to the recovery host. Verify by
+streaming the decrypted archive; the verifier writes no decrypted files:
+
+```bash
+python3 scripts/backups/recovery-pds.py verify \
+  --archive recovery.tar.age \
+  --identity ~/.config/age/pds-recovery.key \
+  --expected-sha256 <sha256-from-OMV> \
+  --receipt recovery-receipt.json
+```
+
+The export contains the full latest verified artifact set, including
+`data.tar`, plus the repository credentials, CA, initial upload/restore/smoke
+evidence, daily receipts, schedule proof, and retention proof.
+
+### Production restore outline
+
+`restore-pds.py` validates into scratch storage; it does not overwrite the live
+claim. For a real recovery, keep VM `104` and the existing `/pds` untouched,
+scale `deployment/pds` to `0`, restore the newest verified snapshot with the
+same Restic credentials and CA, verify `SHA256SUMS` and SQLite integrity, then
+stage the restored data at a new local path owned by `1000:1000` with directories
+`0700` and files `0600`. Point the `pds-data` PV/PVC at the staged data, scale the
+Deployment to `1`, and verify health, service DID, and the repository listing
+before deleting any prior copy.
 
 Keep the backup repository off the OMV host as well as on it.

@@ -1,0 +1,12 @@
+# managed by nas-backup-migration
+[Unit]
+Description=daily pds backup at 06:00 Arizona time
+
+[Timer]
+OnCalendar=*-*-* 13:00:00 UTC
+Persistent=true
+AccuracySec=1min
+Unit=k3s-pds-backup.service
+
+[Install]
+WantedBy=timers.target

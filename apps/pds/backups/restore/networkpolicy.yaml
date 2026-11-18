@@ -1,0 +1,13 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pds-restore-validation-isolation
+spec:
+  podSelector:
+    matchLabels:
+      backups.mousses.xyz/restore-isolated: "true"
+  policyTypes: [Ingress, Egress]
+  # Validation and smoke-test Pods must not federate, publish, or reach any
+  # network. kubectl exec still works through the kubelet.
+  ingress: []
+  egress: []
