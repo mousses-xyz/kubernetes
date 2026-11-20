@@ -63,6 +63,10 @@ second-level wildcard certificate limit. Local split-horizon UniFi DNS still
 returns `10.9.20.14` for `bluesky` and `*.bluesky`, so LAN clients bypass the
 tunnel.
 
+There is no WAN port forward for the PDS. The public IPv4 `443` no longer
+reaches Traefik; the UDR7 answers there with its own UniFi OS page. The
+Cloudflare Tunnel is the only public PDS path.
+
 TLS at the origin is still cert-manager's `pds-tls`. Cloudflared verifies it
 with SNI `bluesky.mousses.xyz`; Cloudflare terminates public TLS at the edge.
 The wildcard certificate remains installed for local use and any future
@@ -197,12 +201,13 @@ kubectl -n pds logs -f deploy/pds
 
 These are the original direct-IPv4 cutover steps, kept for rollback. Public
 ingress has since moved to the Cloudflare Tunnel; see **Architecture** above.
+The Bluesky port forward has been removed. The historical steps were:
 
-- Change the unmanaged **Bluesky** port forward on the UDR7 from
-  `10.9.20.12` to Traefik's LAN address (normally `10.9.20.14`).
-- Forward 443 to Traefik `443`. Forward 80 to Traefik's HTTP entrypoint
-  (`8080` in the current Traefik config), or leave 80 disabled until a redirect
-  route is added.
+- Move the Bluesky forward from `10.9.20.12` to Traefik's LAN address
+  (normally `10.9.20.14`).
+- Forward `443` to Traefik `443`. Forward `80` to Traefik's HTTP entrypoint
+  (`8080` in the current Traefik config), or leave `80` disabled until a
+  redirect route is added.
 - Keep the Cloudflare `A` records unchanged while the public IPv4 is unchanged.
 - Remove the public `AAAA` records for `bluesky` and `*.bluesky` unless Traefik
   has a verified public IPv6 path.
@@ -279,7 +284,8 @@ websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=
 1. `kubectl -n pds scale deploy/pds --replicas=0`
 2. Revert the Cloudflare tunnel/DNS change and apply it, restoring the public
    `bluesky` and `*.bluesky` `A` records and removing the tunnel CNAME.
-3. Point the UDR7 Bluesky forward and local DNS back to `10.9.20.12`.
+3. Recreate the UDR7 Bluesky forward (`WAN TCP/UDP 443 -> 10.9.20.12:443`) and
+   point local DNS back to `10.9.20.12`.
 4. Start the VM PDS.
 5. If the Kubernetes PDS accepted new writes, copy its `/pds` back to the VM
    before starting the old PDS.
@@ -304,6 +310,9 @@ websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=
 - **Cloudflare now proxies public PDS traffic.** If federation stalls, check
   Bot Fight Mode, WAF challenges, and security-level rules for
   `bluesky.mousses.xyz`. The relay and AppView crawlers must not be challenged.
+- **No WAN port forward remains.** The public IPv4 `443` is the UDR7's own
+  UniFi OS page, not the PDS. Test the PDS through `bluesky.mousses.xyz` or the
+  tunnel.
 - **The public wildcard was removed.** Handle resolution is TXT-only for
   `petmouse.bluesky.mousses.xyz`. Creating another account under
   `*.bluesky.mousses.xyz` requires its own `_atproto.<handle>` TXT record, or a
