@@ -77,6 +77,14 @@ spec:
           port: 443
         - protocol: TCP
           port: 8000
+    # Traefik's Service ClusterIP. kube-router evaluates egress policy before
+    # Service DNAT, so the pod selector alone does not match tunnel traffic.
+    - to:
+        - ipBlock:
+            cidr: 10.43.204.62/32
+      ports:
+        - protocol: TCP
+          port: 443
     - to:
         - namespaceSelector:
             matchLabels:

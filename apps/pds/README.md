@@ -18,6 +18,8 @@ Current production facts:
 - service DID `did:web:bluesky.mousses.xyz`
 - one hosted account, `did:plc:csv4htneuv5pmbep5ivobilv`
 - handle domain `.bluesky.mousses.xyz`
+- public ingress via the `homelab` Cloudflare Tunnel; handle
+  `petmouse.bluesky.mousses.xyz` resolves with an `_atproto` TXT record
 - blob upload limit 50 MB
 - PDS data lives under `/pds`: SQLite databases, `actors/`, and `blocks/`
 - current `/pds` size is about **171 MB**; the 64 GiB PV is headroom for future
@@ -26,10 +28,16 @@ Current production facts:
 ## Architecture
 
 ```text
-Cox IPv4 / optional Cloudflare Tunnel
+Internet
         |
         v
-UDR7 80/443 -> Traefik on openmediavault
+Cloudflare edge (proxied CNAME bluesky.mousses.xyz)
+        |
+        v
+cloudflared (namespace cloudflare)
+        |
+        v
+Traefik websecure :443 (SNI bluesky.mousses.xyz)
         |
         v
 Service pds:3000
@@ -41,11 +49,25 @@ Deployment pds (1 replica, openmediavault)
 PVC pds-data -> /filesystem/k3s/data/pds
 ```
 
-TLS is issued by cert-manager through the existing
-`letsencrypt-production-cloudflare` ClusterIssuer. The certificate covers both
-`bluesky.mousses.xyz` and `*.bluesky.mousses.xyz`.
+Public ingress uses the existing `homelab` Cloudflare Tunnel. The tunnel
+ingress targets Traefik's in-cluster Service, not the PDS Service, so the PDS
+NetworkPolicy still admits only the ingress controller. The PDS route
+deliberately has **no** Cloudflare Access application because federation must
+stay public.
 
-Traefik routes the root hostname and all first-level subdomains to the PDS.
+Public DNS has no `A`/`AAAA` records for `bluesky` or `*.bluesky`.
+`bluesky.mousses.xyz` is a proxied CNAME to the tunnel. The handle
+`petmouse.bluesky.mousses.xyz` resolves through the preferred `_atproto` DNS
+TXT record (`did=did:plc:csv4htneuv5pmbep5ivobilv`), which avoids Cloudflare's
+second-level wildcard certificate limit. Local split-horizon UniFi DNS still
+returns `10.9.20.14` for `bluesky` and `*.bluesky`, so LAN clients bypass the
+tunnel.
+
+TLS at the origin is still cert-manager's `pds-tls`. Cloudflared verifies it
+with SNI `bluesky.mousses.xyz`; Cloudflare terminates public TLS at the edge.
+The wildcard certificate remains installed for local use and any future
+wildcard ingress.
+
 There is deliberately no Authentik middleware: PDS federation must remain
 publicly reachable.
 
@@ -173,6 +195,9 @@ kubectl -n pds logs -f deploy/pds
 
 ### 5. Switch ingress
 
+These are the original direct-IPv4 cutover steps, kept for rollback. Public
+ingress has since moved to the Cloudflare Tunnel; see **Architecture** above.
+
 - Change the unmanaged **Bluesky** port forward on the UDR7 from
   `10.9.20.12` to Traefik's LAN address (normally `10.9.20.14`).
 - Forward 443 to Traefik `443`. Forward 80 to Traefik's HTTP entrypoint
@@ -196,6 +221,26 @@ curl https://bluesky.mousses.xyz/xrpc/com.atproto.sync.listRepos?limit=100
 
 Expected: runtime `0.4.5051`, the same service DID, the same one repo, the same
 handle domain, and the same 50 MB blob limit.
+
+Confirm the request actually used the tunnel. On the LAN, normal DNS returns
+Traefik's private address, so force a public Cloudflare edge address:
+
+```bash
+# Get the public edge address without the local split-horizon answer.
+curl -fsS -H 'accept: application/dns-json' \
+  'https://cloudflare-dns.com/dns-query?name=bluesky.mousses.xyz&type=A' |
+  jq -r '.Answer[] | select(.type == 1) | .data' | head -1
+
+curl --resolve bluesky.mousses.xyz:443:<edge-ip> \
+  https://bluesky.mousses.xyz/xrpc/_health
+```
+
+Check the handle TXT record:
+
+```bash
+dig +short TXT _atproto.petmouse.bluesky.mousses.xyz
+# "did=did:plc:csv4htneuv5pmbep5ivobilv"
+```
 
 Check the relay:
 
@@ -221,8 +266,9 @@ a debug pod with `sqlite3` and the PVC mounted.
 Also verify:
 
 ```bash
-# Wildcard handle routing
-curl https://<handle>.bluesky.mousses.xyz/.well-known/atproto-did
+# Handle resolution: preferred TXT method, plus PDS-side resolution
+dig +short TXT _atproto.petmouse.bluesky.mousses.xyz
+curl 'https://bluesky.mousses.xyz/xrpc/com.atproto.identity.resolveHandle?handle=petmouse.bluesky.mousses.xyz'
 
 # WebSocket firehose (use websocat/wscat)
 websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=0'
@@ -231,9 +277,11 @@ websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=
 ## Rollback
 
 1. `kubectl -n pds scale deploy/pds --replicas=0`
-2. Point the UDR7 forward and local DNS back to `10.9.20.12`.
-3. Start the VM PDS.
-4. If the Kubernetes PDS accepted new writes, copy its `/pds` back to the VM
+2. Revert the Cloudflare tunnel/DNS change and apply it, restoring the public
+   `bluesky` and `*.bluesky` `A` records and removing the tunnel CNAME.
+3. Point the UDR7 Bluesky forward and local DNS back to `10.9.20.12`.
+4. Start the VM PDS.
+5. If the Kubernetes PDS accepted new writes, copy its `/pds` back to the VM
    before starting the old PDS.
 
 ## Known gotchas
@@ -253,6 +301,16 @@ websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=
 - **SMTP egress** is allowed on ports 25/465/587. If the current SMTP endpoint
   is on the LAN, add a specific LAN egress rule; the current policy only allows
   public destinations.
+- **Cloudflare now proxies public PDS traffic.** If federation stalls, check
+  Bot Fight Mode, WAF challenges, and security-level rules for
+  `bluesky.mousses.xyz`. The relay and AppView crawlers must not be challenged.
+- **The public wildcard was removed.** Handle resolution is TXT-only for
+  `petmouse.bluesky.mousses.xyz`. Creating another account under
+  `*.bluesky.mousses.xyz` requires its own `_atproto.<handle>` TXT record, or a
+  manual Advanced Certificate plus a wildcard tunnel route.
+- **Cloudflare's proxy has a 100-second HTTP timeout.** Long-lived
+  `subscribeRepos` streams reconnect; this is expected and does not affect the
+  repository cursor.
 
 ## Backups
 
