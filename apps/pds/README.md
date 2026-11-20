@@ -5,10 +5,12 @@ Bluesky Personal Data Server, migrated from Proxmox VM `104` to k3s on
 
 ## Status
 
-Production data cutover is in progress. The Deployment runs one replica on the
-copied PVC; the old VM is stopped and retained for rollback until public and
-relay verification is complete. `replicas` is now `1`, so re-applying the app
-will not scale it back down.
+Production is live in Kubernetes and verified externally. Health,
+`describeServer`, `listRepos`, and federation pass. The old VM is stopped and
+retained for rollback. `replicas` is `1`, so re-applying the app will not scale
+it back down.
+
+The isolated staging app (`apps/pds-staging`) was removed after validation.
 
 Current production facts:
 
@@ -114,7 +116,7 @@ Expected:
 
 - `pds-data` is `Bound`
 - both Certificates become `Ready=True`
-- `deploy/pds` is `0/0`
+- `deploy/pds` is `1/1`
 
 The staging certificate is unused by the IngressRoute; it validates wildcard
 DNS-01 issuance before the production certificate is relied on.
@@ -233,32 +235,6 @@ websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=
 3. Start the VM PDS.
 4. If the Kubernetes PDS accepted new writes, copy its `/pds` back to the VM
    before starting the old PDS.
-
-## Phase 2 staging
-
-Phase 2 is implemented in [`apps/pds-staging/`](../pds-staging/README.md). It
-uses independent identity, storage, and credentials. Do not reuse production
-secrets or the production PVC.
-
-Suggested staging values:
-
-```text
-PDS_HOSTNAME=pds-staging.mousses.xyz
-PDS_SERVICE_HANDLE_DOMAINS=.pds-staging.mousses.xyz
-PDS_CRAWLERS=
-PDS_INVITE_REQUIRED=false
-PDS_DATA_DIRECTORY=/pds
-PDS_BLOBSTORE_DISK_LOCATION=/pds/blocks
-```
-
-Generate new `PDS_JWT_SECRET`, `PDS_ADMIN_PASSWORD`, and PLC key for staging.
-Use a separate PV at `/filesystem/k3s/data/pds-staging`, a 5 GiB PVC, a
-`pds-staging` namespace, and certificates for
-`pds-staging.mousses.xyz` plus `*.pds-staging.mousses.xyz`. The staging route
-must use the same Traefik/cert-manager path as production.
-
-Validate health, wildcard TLS, invite/account creation, a post, a pod restart,
-and a WebSocket firehose connection before touching production.
 
 ## Known gotchas
 
