@@ -33,7 +33,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
+          # cloudflare/cloudflared 2026.11.1
+          image: cloudflare/cloudflared@sha256:e613aadbc2d9511785d2e67a86b0c8ac18dd63a3f9af0d06faf04cbfdcb35f2d
           imagePullPolicy: IfNotPresent
           args:
             - tunnel
