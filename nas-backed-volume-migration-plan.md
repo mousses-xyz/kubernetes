@@ -53,7 +53,7 @@ stop after each namespace. after `monitoring`, obtain separate approval for stag
 
 ## stage 2 — medium impact
 
-**stage 2 approved; `n8n` and `paperless-ngx` backup onboarding complete. `librechat` separately approved; live inventory, browser baseline, and five repository endpoints passed. its initial backup stopped in preflight on MongoDB TTL-index consistency; database-native capture remains pending.** later namespaces require their own explicit approval before inventory or implementation.
+**stage 2 approved; `n8n` and `paperless-ngx` backup onboarding complete. `librechat` separately approved; live inventory, browser baseline, and five repository endpoints passed. its initial backup stopped in preflight on MongoDB TTL-index consistency; database-native capture remains pending. `pds` is a medium-priority namespace; its backup manifests and scripts are committed but onboarding has not started.** later namespaces require their own explicit approval before inventory or implementation.
 
 | namespace | writable data to protect (read-only: no) | retained OMV mounts (read-only: yes) | namespace steps and verification |
 | --- | --- | --- | --- |
@@ -62,8 +62,9 @@ stop after each namespace. after `monitoring`, obtain separate approval for stag
 | `librechat` | data, uploads, images, MongoDB, Meilisearch | — | **live inventory, browser baseline, and five authenticated repository endpoints passed.** initial capture stopped before writer pause because MongoDB has TTL indexes; fsync-locked native dump recovery is being implemented. preserve all five bindings and encryption/OIDC credentials. initial uploads/restores, daily retention/scheduling, and off-NAS recovery remain pending. |
 | `litellm` | PostgreSQL data | — | back up and restore the database; verify the gateway and its persisted configuration. |
 | `jellyfin` | config and cache | movies and TV | protect writable claims; retain media bindings and OMV placement. restore and verify configuration and playback. |
+| `pds` | SQLite databases, `actors/`, and `blocks/` under `/pds` | — | **medium priority; manifests and scripts committed, onboarding not started.** quiesce the writer, capture the SQLite databases with integrity checks and blob checksums, verify an isolated restore with a no-network PDS smoke test, then enable the 06:00 Arizona daily run with `7d` retention and an encrypted off-OMV recovery export. keep VM `104` stopped until the restore passes. |
 
-stop after each namespace. after `jellyfin`, obtain separate approval for stage 3.
+stop after each namespace. after the stage 2 namespaces, obtain separate approval for stage 3.
 
 ## stage 3 — high impact
 
