@@ -313,6 +313,10 @@ websocat 'wss://bluesky.mousses.xyz/xrpc/com.atproto.sync.subscribeRepos?cursor=
 - **No WAN port forward remains.** The public IPv4 `443` is the UDR7's own
   UniFi OS page, not the PDS. Test the PDS through `bluesky.mousses.xyz` or the
   tunnel.
+- **Only one cloudflared connector should use the tunnel token.** A connector
+  outside the cluster cannot resolve `traefik.kube-system.svc.cluster.local`
+  and will return `502` for PDS requests. If the PDS is intermittently
+  unreachable, check Cloudflare Tunnel → Replicas and remove stale hosts.
 - **The public wildcard was removed.** Handle resolution is TXT-only for
   `petmouse.bluesky.mousses.xyz`. Creating another account under
   `*.bluesky.mousses.xyz` requires its own `_atproto.<handle>` TXT record, or a
