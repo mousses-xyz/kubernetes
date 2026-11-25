@@ -27,6 +27,9 @@ COORDINATION_LOCK = Path("/root/k3s-backup-recovery/board-games/data-postgres-0/
 MANIFESTS = Path(__file__).resolve().parents[2] / "apps/pds/backups"
 CLAIM = "pds-data"
 IMAGE = "ghcr.io/bluesky-social/pds@sha256:20db9d828e9096978a907fe134125cdb26a00417aef6376920204bbfa060ab5c"
+TARGET_NODE = "openmediavault"
+TARGET_NODE_AFFINITY = {"required": {"nodeSelectorTerms": [{"matchExpressions": [
+    {"key": "kubernetes.io/hostname", "operator": "In", "values": [TARGET_NODE]}]}]}}
 SERVER_REQUESTS = {"cpu": "25m", "memory": "32Mi"}
 DIRECTORIES = [
     (BASE / "backups", 65534, 65534, 0o2770),
@@ -273,9 +276,10 @@ def resource_budget(node, pods, *, worker=True, extra=None):
 
 def live_preflight(*, check_resources=True):
     nodes = json.loads(kube("get", "nodes", "-o", "json", capture=True).stdout)["items"]
-    if [node["metadata"]["name"] for node in nodes] != ["openmediavault"]:
-        raise SetupError("additional nodes require the later approval gate")
-    node = nodes[0]
+    matches = [item for item in nodes if item["metadata"]["name"] == TARGET_NODE]
+    if len(matches) != 1:
+        raise SetupError("the openmediavault node is missing or duplicated")
+    node = matches[0]
     if (node["spec"].get("unschedulable") or any(item.get("effect") in ("NoSchedule", "NoExecute") for item in node["spec"].get("taints", [])) or
             not any(item.get("type") == "Ready" and item.get("status") == "True" for item in node["status"].get("conditions", [])) or
             any(item.get("status") == "True" for item in node["status"].get("conditions", [])
@@ -289,6 +293,7 @@ def live_preflight(*, check_resources=True):
             volume["spec"].get("claimRef", {}).get("uid") != claim["metadata"]["uid"] or
             volume["spec"].get("local", {}).get("path") != str(LIVE) or
             volume["spec"].get("persistentVolumeReclaimPolicy") != "Retain" or
+            volume["spec"].get("nodeAffinity") != TARGET_NODE_AFFINITY or
             any(item["spec"].get("accessModes") != ["ReadWriteOncePod"] for item in (claim, volume))):
         raise SetupError("live binding differs from the verified inventory: " + CLAIM)
     checked_live_directory()
@@ -301,12 +306,13 @@ def live_preflight(*, check_resources=True):
     mounts = {item["name"]: item for item in spec.get("volumes", [])}
     if (len(containers) != 1 or containers[0].get("image") != IMAGE or
             spec.get("initContainers") or spec.get("ephemeralContainers") or
+            spec.get("nodeSelector") != {"kubernetes.io/hostname": TARGET_NODE} or
             not any(mount.get("mountPath") == "/pds" and not mount.get("readOnly") and
                     not mount.get("subPath") and not mount.get("subPathExpr") and
                     mounts.get(mount["name"], {}).get("persistentVolumeClaim", {}).get("claimName") == CLAIM
                     for mount in containers[0].get("volumeMounts", [])) or
             containers[0].get("envFrom") != [{"secretRef": {"name": "pds-env"}}]):
-        raise SetupError("PDS image, Secret, or writable data mount changed")
+        raise SetupError("PDS image, Secret, placement, or writable data mount changed")
     secret = get_object("secret", "pds-env", NAMESPACE, sensitive=True)
     if not secret:
         raise SetupError("required PDS environment Secret is missing")

@@ -81,8 +81,8 @@ publicly reachable.
   `1000`.
 - `/pds/pds.env` must be available as a protected file on the machine running
   `kubectl`. Never commit it.
-- The storage, certificate, and service manifests assume the single k3s node is
-  named `openmediavault`.
+- The storage, certificate, backup, and service manifests are pinned to the k3s
+  node named `openmediavault`; other cluster nodes are not used by PDS.
 
 Create the PV directory on OMV:
 
