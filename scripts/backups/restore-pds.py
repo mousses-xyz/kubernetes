@@ -153,7 +153,13 @@ def prepare_storage(resources, existing):
             if any(path.iterdir()) and not existing[resource["metadata"]["name"]]:
                 raise setup.SetupError("nonempty scratch data has no managed PV; preserving it")
             attributes = path.stat()
-            if (attributes.st_uid, attributes.st_gid, stat.S_IMODE(attributes.st_mode)) != (999, 999, 0o2770):
+            # The validation Job extracts the archive root onto the data PVC
+            # root, so a resumed run legitimately sees the captured 1000:1000
+            # ownership instead of the 999:999 staging ownership.
+            restored_data = (path == BASE_RESTORE / "data" and
+                             (attributes.st_uid, attributes.st_gid) == (1000, 1000))
+            if ((attributes.st_uid, attributes.st_gid, stat.S_IMODE(attributes.st_mode)) != (999, 999, 0o2770)
+                    and not restored_data):
                 raise setup.SetupError("existing scratch directory ownership or mode differs: " + str(path))
         else:
             path.mkdir(parents=True, mode=0o2770)
