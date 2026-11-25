@@ -28,7 +28,7 @@ When an OMV run changes a script since the last run, pull first and verify its c
 
 ## approved order and progress
 
-Namespace order is sequential and gated by the migration plan. Monitoring, n8n, and paperless-ngx have been approved and their backup/restore/recovery work is complete. Scheduled-run verification remains deferred for monitoring and n8n. Paperless-ngx later had a verified automatic run on 2026-10-26, despite an earlier deferral. LibreChat is approved and is the current namespace. Its automatic schedule, initial restore validation, and off-NAS recovery export remain pending. Do not start the next namespace (LiteLLM) until LibreChat is complete and approved.
+Namespace order is sequential and gated by the migration plan. Monitoring, n8n, and paperless-ngx have been approved and their backup/restore/recovery work is complete. Scheduled-run verification remains deferred for monitoring and n8n. Paperless-ngx later had a verified automatic run on 2026-10-26, despite an earlier deferral. LibreChat remains approved with its consistent initial backup and later gates still pending. PDS was separately authorized; its backup onboarding is complete except the off-host recovery export, which the user deferred on 2026-11-25 (see the PDS section below). Do not start another namespace without explicit approval.
 
 | namespace | completed | still pending |
 | --- | --- | --- |
@@ -36,8 +36,22 @@ Namespace order is sequential and gated by the migration plan. Monitoring, n8n, 
 | n8n | live-data split from nested backup path, browser check, initial/daily backups, isolated restore, recovery archive and off-NAS verification | scheduled-run verification (deferred) |
 | paperless-ngx | GPT state capture and storage cutover, repaired GPT API token, browser validation, seven-component initial/daily backup, isolated restore, retention proof, verified automatic run, recovery archive and off-NAS verification | none |
 | LibreChat | user-approved baseline browser checks; Meilisearch endpoint verified; five repositories/endpoints installed and authenticated; initial backup resources installed | complete the consistent initial capture/upload/verification, restore validation, daily schedule and retention proof, recovery archive/off-NAS verification, browser checks after any restart, and schedule verification unless explicitly deferred |
+| pds | consistent SQLite/blob capture, initial and daily VolSync backups, isolated no-network restore and smoke test, daily schedule, and retention proof verified at revision `211e9ec` | off-host age export and independent verification deferred by the user on 2026-11-25; first timer-triggered run due 2026-11-26 06:00 MST; VM `104` remains up until the export passes |
 
 Detailed historical receipts and implementation notes remain in `nas-backed-volume-migration-plan.md`; this file is the concise operational handoff.
+
+## PDS current state
+
+PDS backup onboarding targets the live local PV at `/filesystem/k3s/data/pds` (SQLite databases, `actors/`, and `blocks/`) and stores its Restic repository, staging, history, and restore scratch under the sibling `/filesystem/k3s/data/pds-backups`. Each run serializes with the existing namespace backup workers, scales `deployment/pds` to `0` for the consistent capture, restarts it, and waits for readiness before uploading. `redqueen` was NotReady and tainted during this work; it was not modified.
+
+- **Initial backup verified:** generation `initial-941499f03ae0f26b1bf5a20ff4de02d8`, snapshot `fceefbe76bca7527110fd9095c316676ba345c974faf16e66facdbf0f765eb69`. All artifact checksums and a full repository data check passed.
+- **Isolated restore verified:** 109 files, 8 directories, and 4 SQLite databases restored with matching ownership/modes and SQLite integrity. A no-network PDS smoke Deployment served the expected health, service DID `did:web:bluesky.mousses.xyz`, and one repository. The live claim was not touched.
+- **Daily schedule installed at revision `211e9ec83a10da0805d54a08a8a39b43ca57fcbe`:** `k3s-pds-backup.timer` at 06:00 Arizona / 13:00 UTC with missed-run catch-up, plus `k3s-pds-backup-recovery.service` for interrupted-writer recovery. The installer's manual daily sequence passed.
+- **Daily and retention proof verified:** generation `daily-7d2f59aa7400e1da194ac32cec281e46`, snapshot `035d3c9383d4380734b769e5d3a4fbeec0c4197f54ae6ceb12732a273e9744e8`. The scratch proof expired a nine-day snapshot, retained the six-day and current snapshots, and reclaimed 264,516 bytes.
+- **Live check on 2026-11-25:** `pds` and `restic-server` are 1/1, the smoke Deployment is 0/0 as intended, no Pods are failing, and PDS health returns version `0.4.5051`. The timer's `LAST`/`PASSED` columns are blank because the installer ran the service manually; the first timer-triggered run is due `2026-11-26 06:00 MST`.
+- **Open gate:** the age-encrypted off-host export and independent verification were deferred by the user on 2026-11-25. No verified off-host copy or verification receipt exists yet, so **do not decommission VM `104`** until the export is created, copied off OMV, and verified with the offline age identity. The procedure is in `apps/pds/README.md`; the recipient is the owner's native `age1...` key and the private key stays off OMV and off the cluster.
+
+The validation sequence produced four fixes: `1ff2bca` (persist resource UIDs separately), `56d721a` (minimum restore capabilities), `6d1a7e3` (accept setgid receipt GID), and `211e9ec` (accept restored data-root ownership on resume).
 
 ## LibreChat current state
 
@@ -50,7 +64,7 @@ Detailed historical receipts and implementation notes remain in `nas-backed-volu
 - The failed preflight printed `Failed to allocate directory watch: Too many open files`; a read-only diagnostic showed 10,944 allocated file handles against an effectively unlimited max, and inotify limits of 128 instances / 245,806 watches. The precise source of the watch warning is unknown. It was not the fatal preflight reason on the retry. The repository endpoint scope failure was fixed separately; do not conflate these warnings with the Mongo TTL guard.
 - A previous install output showed the old Restic-Pod-count failure before the new run started; this was stale systemd journal text. On retries, identify the current invocation and current service result, not just any prior error line.
 
-## current implementation review focus
+## LibreChat implementation review focus
 
 The uncommitted change in `scripts/backups/backup-librechat.py` adds MongoDB fsync-lock acquisition, durable quiescence-journal state, cleanup on exceptions/signals, lock evidence in the database artifact, and removes the TTL-index rejection. Review the full state machine before running the service. Required invariants:
 
@@ -74,8 +88,12 @@ Static parsing and `git diff --check` are appropriate here; the user has not ask
 - Do not use forced Restic unlocks. Monitoring previously showed stale-looking locks and an ISO timestamp parse bug; preserve lock evidence and repair parsing/ownership checks rather than unlocking blindly.
 - Avoid commands that assume a repo path on OMV; the user has already hit a `cd` failure from a guessed path. Start with `git pull --ff-only` in the current checkout.
 - Capture and recovery scripts must not print credential values, encryption keys, document titles/content, or raw application logs. Off-NAS verification must not leave decrypted files behind.
+- PDS restore validation must run as root with only the capabilities it needs: `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, and `FSETID`. Dropping all capabilities prevents UID 0 from traversing the VolSync artifacts owned by UID 999 and from restoring captured UID/GID 1000.
+- A setgid artifacts PVC makes a root-owned validation receipt inherit GID 999. Validate its UID, mode `0600`, and single link; requiring exact GID 0 is too strict.
+- The PDS validation step extracts the archive root onto the data PVC root, so a resumed run legitimately sees captured `1000:1000` ownership instead of the pre-validation `999:999` staging tuple.
+- `systemctl list-timers` leaves `LAST`/`PASSED` blank until the timer itself fires; manually starting the service does not populate them.
 
-## next actions
+## LibreChat next actions
 
 1. Finish adversarial review of the pending MongoDB fsync-lock implementation, especially stale/released markers, process identity changes, lock-count races, interrupts, and subprocess cleanup.
 2. Update `nas-backed-volume-migration-plan.md` with the observed LibreChat preflight stop and the approved consistency approach; do not duplicate all of this handoff into that plan.
