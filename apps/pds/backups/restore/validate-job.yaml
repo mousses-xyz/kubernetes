@@ -217,8 +217,12 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+            # Root must restore captured UID/GID 1000. These are the minimum
+            # capabilities needed to traverse and read the 999-owned restored
+            # artifacts, then chown/chmod the extracted data.
             capabilities:
               drop: [ALL]
+              add: [CHOWN, DAC_OVERRIDE, FOWNER, FSETID]
           volumeMounts:
             - name: artifacts
               mountPath: /artifacts

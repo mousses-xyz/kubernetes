@@ -397,7 +397,9 @@ sudo python3 scripts/backups/restore-pds.py
 ```
 
 The validation Job runs as root only because `data.tar` preserves UID/GID
-`1000:1000`; it has no network access and writes only to isolated scratch paths.
+`1000:1000`; it keeps only `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, and `FSETID` so
+it can traverse the UID-999 restored artifacts and restore ownership. It has no
+network access and writes only to isolated scratch paths.
 The smoke Deployment runs as `1000:1000`, forces `PDS_CRAWLERS` empty, requests
 less CPU/memory than production so it can schedule beside the live PDS, and is
 scaled back to zero when the test finishes. The `pds` namespace Pod Security
