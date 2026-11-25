@@ -69,3 +69,39 @@ spec:
   resources:
     requests:
       storage: 1Ti
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-movie-recordings
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: movie-recordings
+    app.kubernetes.io/part-of: jellyfin
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: jellyfin-media-local
+  volumeName: jellyfin-movie-recordings
+  resources:
+    requests:
+      storage: 1Ti
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-tv-recordings
+  namespace: jellyfin
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: tv-recordings
+    app.kubernetes.io/part-of: jellyfin
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: jellyfin-media-local
+  volumeName: jellyfin-tv-recordings
+  resources:
+    requests:
+      storage: 1Ti

@@ -69,7 +69,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: jellyfin-media-local
   local:
-    path: /filesystem/Media/Media/Movies
+    path: /filesystem/Media/Movies
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -96,7 +96,61 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: jellyfin-media-local
   local:
-    path: /filesystem/Media/Media/TV
+    path: /filesystem/Media/TV
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - openmediavault
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-movie-recordings
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: movie-recordings
+    app.kubernetes.io/part-of: jellyfin
+spec:
+  capacity:
+    storage: 1Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: jellyfin-media-local
+  local:
+    path: /filesystem/Media/Movie_Recordings
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - openmediavault
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-tv-recordings
+  labels:
+    app.kubernetes.io/name: jellyfin
+    app.kubernetes.io/component: tv-recordings
+    app.kubernetes.io/part-of: jellyfin
+spec:
+  capacity:
+    storage: 1Ti
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: jellyfin-media-local
+  local:
+    path: /filesystem/Media/TV_Recordings
   nodeAffinity:
     required:
       nodeSelectorTerms:

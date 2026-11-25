@@ -84,6 +84,10 @@ spec:
             - name: jellyfin-tv
               mountPath: /tv
               readOnly: true
+            - name: jellyfin-movie-recordings
+              mountPath: /movie-recordings
+            - name: jellyfin-tv-recordings
+              mountPath: /tv-recordings
             - name: host-time
               mountPath: /etc/localtime
               readOnly: true
@@ -102,6 +106,12 @@ spec:
           persistentVolumeClaim:
             claimName: jellyfin-tv
             readOnly: true
+        - name: jellyfin-movie-recordings
+          persistentVolumeClaim:
+            claimName: jellyfin-movie-recordings
+        - name: jellyfin-tv-recordings
+          persistentVolumeClaim:
+            claimName: jellyfin-tv-recordings
         - name: host-time
           hostPath:
             path: /etc/localtime
