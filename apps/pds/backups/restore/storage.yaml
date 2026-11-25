@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pds-data-restore-artifacts
+spec:
+  capacity:
+    storage: 64Gi
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: pds-backup-local
+  claimRef:
+    namespace: pds
+    name: data-restore-artifacts
+  local:
+    path: /filesystem/k3s/data/pds-backups/restore-validation/pds-data/initial/artifacts
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [openmediavault]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-restore-artifacts
+spec:
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  storageClassName: pds-backup-local
+  volumeName: pds-data-restore-artifacts
+  resources:
+    requests:
+      storage: 64Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pds-data-restore-data
+spec:
+  capacity:
+    storage: 64Gi
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: pds-backup-local
+  claimRef:
+    namespace: pds
+    name: data-restore-data
+  local:
+    path: /filesystem/k3s/data/pds-backups/restore-validation/pds-data/initial/data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [openmediavault]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-restore-data
+spec:
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  storageClassName: pds-backup-local
+  volumeName: pds-data-restore-data
+  resources:
+    requests:
+      storage: 64Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pds-data-restore-cache
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: pds-backup-local
+  claimRef:
+    namespace: pds
+    name: volsync-dst-data-restore-initial-cache
+  local:
+    path: /filesystem/k3s/data/pds-backups/restore-validation/pds-data/initial/cache
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [openmediavault]

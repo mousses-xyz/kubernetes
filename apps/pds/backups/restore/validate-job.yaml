@@ -1,0 +1,243 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-restore-validation-initial
+  namespace: pds
+  labels:
+    app.kubernetes.io/name: pds-restore-validation
+    app.kubernetes.io/part-of: pds
+    app.kubernetes.io/managed-by: nas-backup-migration
+    backups.mousses.xyz/restore-isolated: "true"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1200
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pds-restore-validation
+        app.kubernetes.io/part-of: pds
+        backups.mousses.xyz/restore-isolated: "true"
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: openmediavault
+      # Extracting the archive restores the captured numeric ownership (1000).
+      # This Pod has no network access and writes only to isolated scratch PVCs.
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: validate
+          # VolSync 0.16.0 includes Python 3 and sqlite3 support.
+          image: quay.io/backube/volsync@sha256:0d03a6aad57569eba2c0eaa0848cf4a908d9744b372ff2224bb291a320f36d76
+          command: [python3, -u, -c]
+          args:
+            - |
+              import hashlib
+              import json
+              import os
+              from pathlib import Path
+              import sqlite3
+              import stat
+              import tarfile
+
+              artifacts = Path(os.environ["ARTIFACT_DIRECTORY"])
+              data = Path("/data")
+              identifier = os.environ["BACKUP_ID"]
+              expected_sums = os.environ["EXPECTED_SHA256SUMS"]
+              required = {"data.tar", "contents.json", "application.json",
+                          "application-config.json", "application-secret.json",
+                          "sqlite-integrity.json", "metadata.json", "backup-id", "SHA256SUMS"}
+
+              def fail(message):
+                  raise SystemExit(message)
+
+              def digest(path):
+                  checksum = hashlib.sha256()
+                  with path.open("rb") as source:
+                      while chunk := source.read(4 * 1024 * 1024):
+                          checksum.update(chunk)
+                  return checksum.hexdigest()
+
+              names = {item.name for item in artifacts.iterdir()}
+              if names != required:
+                  fail("restored artifact set is incomplete or unexpected")
+              if (artifacts / "backup-id").read_text().strip() != identifier:
+                  fail("restored artifacts belong to a different generation")
+              if (artifacts / "SHA256SUMS").read_text() != expected_sums:
+                  fail("restored checksum manifest differs from the verified upload")
+              for line in expected_sums.splitlines():
+                  checksum, name = line.split("  ", 1)
+                  if name not in required - {"SHA256SUMS"} or digest(artifacts / name) != checksum:
+                      fail("restored artifact checksum failed: " + name)
+
+              metadata = json.loads((artifacts / "metadata.json").read_text())
+              contents_list = json.loads((artifacts / "contents.json").read_text())
+              application = json.loads((artifacts / "application.json").read_text())
+              integrity = json.loads((artifacts / "sqlite-integrity.json").read_text())
+              if (metadata.get("backup_id") != identifier or metadata.get("claim") != "pds-data"):
+                  fail("restored metadata identity differs")
+              if not isinstance(contents_list, list) or not contents_list:
+                  fail("restored contents inventory is empty")
+              contents = {}
+              for entry in contents_list:
+                  if (not isinstance(entry, dict) or entry.get("path") in contents or
+                          entry.get("type") not in ("file", "directory") or
+                          not isinstance(entry.get("mode"), int) or
+                          not isinstance(entry.get("uid"), int) or not isinstance(entry.get("gid"), int)):
+                      fail("restored contents inventory is invalid")
+                  contents[entry["path"]] = entry
+              if "." not in contents or contents["."].get("type") != "directory":
+                  fail("restored contents inventory has no root directory")
+
+              if data.exists():
+                  if any(data.iterdir()):
+                      fail("scratch data is not empty; preserving it")
+              else:
+                  data.mkdir(mode=0o700)
+
+              seen = set()
+              with tarfile.open(artifacts / "data.tar", "r:") as archive:
+                  for member in archive:
+                      name = member.name
+                      if name in seen or name not in contents:
+                          fail("archive contains an unexpected or duplicate path: " + name)
+                      seen.add(name)
+                      entry = contents[name]
+                      if (entry["type"] == "directory") != member.isdir() or \
+                              (entry["type"] == "file") != member.isfile() or \
+                              (entry["type"] == "file" and member.size != entry.get("bytes")) or \
+                              member.uid != entry["uid"] or member.gid != entry["gid"] or \
+                              member.mode != entry["mode"]:
+                          fail("archive metadata differs from the inventory: " + name)
+                      target = data / name
+                      if name == ".":
+                          target = data
+                      if Path(name).is_absolute() or any(part in ("..", "") for part in Path(name).parts):
+                          fail("archive path is unsafe")
+                      if entry["type"] == "directory":
+                          target.mkdir(parents=True, exist_ok=True)
+                          os.chown(target, entry["uid"], entry["gid"])
+                          os.chmod(target, entry["mode"])
+                      else:
+                          target.parent.mkdir(parents=True, exist_ok=True)
+                          source = archive.extractfile(member)
+                          if source is None:
+                              fail("archive file content is missing: " + name)
+                          descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                               entry["mode"])
+                          with os.fdopen(descriptor, "wb") as output:
+                              while chunk := source.read(4 * 1024 * 1024):
+                                  output.write(chunk)
+                              output.flush()
+                              os.fsync(output.fileno())
+                          os.chown(target, entry["uid"], entry["gid"], follow_symlinks=False)
+                          os.chmod(target, entry["mode"])
+              if seen != set(contents):
+                  fail("archive does not contain the complete contents inventory")
+
+              files = 0
+              directories = 0
+              databases = []
+              for name, entry in contents.items():
+                  target = data if name == "." else data / name
+                  attributes = target.lstat()
+                  if entry["type"] == "directory":
+                      directories += 1
+                      if not stat.S_ISDIR(attributes.st_mode):
+                          fail("restored directory type differs: " + name)
+                  else:
+                      files += 1
+                      if not stat.S_ISREG(attributes.st_mode) or attributes.st_nlink != 1:
+                          fail("restored file type differs: " + name)
+                      if digest(target) != entry.get("sha256"):
+                          fail("restored file checksum failed: " + name)
+                      if name.endswith(".sqlite") or name.endswith(".sqlite3"):
+                          databases.append((name, target))
+                  if (attributes.st_uid, attributes.st_gid, stat.S_IMODE(attributes.st_mode)) != (
+                          entry["uid"], entry["gid"], entry["mode"]):
+                      fail("restored ownership or mode differs: " + name)
+
+              checked = []
+              for name, path in sorted(databases):
+                  connection = sqlite3.connect("file:" + str(path) + "?mode=ro", uri=True)
+                  try:
+                      result = connection.execute("PRAGMA integrity_check").fetchall()
+                  finally:
+                      connection.close()
+                  if result != [("ok",)]:
+                      fail("restored SQLite integrity check failed: " + name)
+                  checked.append(name)
+              if set(checked) != set(integrity.get("databases", {})):
+                  fail("restored SQLite set differs from the captured integrity evidence")
+              for name, evidence in integrity.get("databases", {}).items():
+                  if evidence.get("integrity_check") != "ok":
+                      fail("captured SQLite integrity evidence is invalid: " + name)
+
+              expected = application.get("describe", {})
+              if (not expected.get("did") or not isinstance(expected.get("availableUserDomains"), list) or
+                      type(application.get("repo_count")) is not int):
+                  fail("captured application identity evidence is incomplete")
+              if metadata.get("service_did") != expected.get("did") or \
+                      metadata.get("repo_count") != application.get("repo_count"):
+                  fail("captured application identity differs from metadata")
+
+              result = {
+                  "result": "passed", "backup_id": identifier, "claim": "pds-data",
+                  "files": files, "directories": directories, "sqlite_databases": len(checked),
+                  "service_did": expected["did"], "repo_count": application["repo_count"],
+                  "archive_metadata_verified": True,
+              }
+              evidence = Path("/artifacts") / "validated-result.json"
+              descriptor = os.open(evidence, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+              with os.fdopen(descriptor, "w") as output:
+                  output.write(json.dumps(result, indent=2) + "\n")
+                  output.flush()
+                  os.fsync(output.fileno())
+              os.chmod(evidence, 0o600)
+              print("RESTORE_VALIDATED_JSON=" + json.dumps(result, sort_keys=True), flush=True)
+              print("isolated SQLite, blob, ownership, and application identity validation passed", flush=True)
+          env:
+            - name: BACKUP_ID
+              value: initial-placeholder
+            - name: ARTIFACT_DIRECTORY
+              value: /artifacts/current
+            - name: EXPECTED_SHA256SUMS
+              value: placeholder
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            # Root must restore captured UID/GID 1000. These are the minimum
+            # capabilities needed to traverse and read the 999-owned restored
+            # artifacts, then chown/chmod the extracted data.
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN, DAC_OVERRIDE, FOWNER, FSETID]
+          volumeMounts:
+            - name: artifacts
+              mountPath: /artifacts
+            - name: data
+              mountPath: /data
+            - name: temp
+              mountPath: /tmp
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: data-restore-artifacts
+        - name: data
+          persistentVolumeClaim:
+            claimName: data-restore-data
+        - name: temp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi

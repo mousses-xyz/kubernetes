@@ -1,0 +1,32 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pds
+  namespace: pds
+  labels:
+    app.kubernetes.io/name: pds
+    app.kubernetes.io/part-of: pds
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`bluesky.mousses.xyz`)
+      priority: 100
+      middlewares:
+        - name: security-headers
+      services:
+        - name: pds
+          port: http
+    # PDS handles use subdomains of the PDS hostname. Traefik's Host matcher
+    # does not cover wildcards, so match the subdomain namespace explicitly.
+    - kind: Rule
+      match: "HostRegexp(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?\\.bluesky\\.mousses\\.xyz$`)"
+      priority: 50
+      middlewares:
+        - name: security-headers
+      services:
+        - name: pds
+          port: http
+  tls:
+    secretName: pds-tls

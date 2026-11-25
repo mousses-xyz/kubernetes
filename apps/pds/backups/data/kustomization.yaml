@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pds
+resources:
+  - replication-source.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: nas-backup-migration
