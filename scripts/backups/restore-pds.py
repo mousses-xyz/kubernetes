@@ -189,9 +189,14 @@ def idle():
 
 def receipt_file(path):
     attributes = path.lstat()
+    # The artifacts PVC is setgid 999, so the root-owned receipt inherits GID
+    # 999. Mode 0600 still restricts the receipt to UID 0.
     if (not stat.S_ISREG(attributes.st_mode) or attributes.st_nlink != 1 or
-            (attributes.st_uid, attributes.st_gid, stat.S_IMODE(attributes.st_mode)) != (0, 0, 0o600)):
-        raise setup.SetupError("restored validation receipt ownership or mode differs")
+            attributes.st_uid != 0 or stat.S_IMODE(attributes.st_mode) != 0o600):
+        raise setup.SetupError(
+            "restored validation receipt ownership or mode differs: "
+            f"uid={attributes.st_uid} gid={attributes.st_gid} "
+            f"mode={stat.S_IMODE(attributes.st_mode):04o} nlink={attributes.st_nlink}")
     return path
 
 
