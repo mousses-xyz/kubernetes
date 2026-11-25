@@ -23,6 +23,7 @@ MANAGER = "nas-backup-migration"
 LIVE = Path("/filesystem/k3s/data/pds")
 BASE = Path("/filesystem/k3s/data/pds-backups")
 RECOVERY = Path("/root/k3s-backup-recovery/pds")
+IDENTITIES = RECOVERY / "resource-identities.json"
 COORDINATION_LOCK = Path("/root/k3s-backup-recovery/board-games/data-postgres-0/.setup.lock")
 MANIFESTS = Path(__file__).resolve().parents[2] / "apps/pds/backups"
 CLAIM = "pds-data"
@@ -274,6 +275,29 @@ def resource_budget(node, pods, *, worker=True, extra=None):
         raise SetupError("insufficient reservations for the pds backup endpoint or worker")
 
 
+def record_identities(resources):
+    """Persist live UIDs separately because recovery snapshots omit server metadata."""
+    recorded = {}
+    if IDENTITIES.exists() or IDENTITIES.is_symlink():
+        saved = json.loads(private_read(IDENTITIES))
+        if (not isinstance(saved, dict) or saved.get("version") != 1 or
+                not isinstance(saved.get("resources"), dict) or
+                not set(saved["resources"]) <= {filename for filename, _ in resources}):
+            raise SetupError("saved resource identity record is invalid")
+        recorded = saved["resources"]
+    current = {}
+    for filename, resource in resources:
+        metadata = resource["metadata"]
+        identity = {"apiVersion": resource["apiVersion"], "kind": resource["kind"],
+                    "name": metadata["name"],
+                    **({"namespace": metadata["namespace"]} if metadata.get("namespace") else {}),
+                    "uid": metadata["uid"]}
+        if recorded.get(filename, identity) != identity:
+            raise SetupError("saved resource identity changed: " + filename)
+        current[filename] = identity
+    private_write(IDENTITIES, json.dumps({"version": 1, "resources": current}, indent=2) + "\n")
+
+
 def live_preflight(*, check_resources=True):
     nodes = json.loads(kube("get", "nodes", "-o", "json", capture=True).stdout)["items"]
     matches = [item for item in nodes if item["metadata"]["name"] == TARGET_NODE]
@@ -337,13 +361,19 @@ def live_preflight(*, check_resources=True):
         raise SetupError("PDS autoscaling requires inspection before backup")
     if check_resources:
         resource_budget(node, pods, worker=False)
-    for filename, resource in (
-            (CLAIM + ".pvc.json", claim), (CLAIM + ".pv.json", volume),
-            ("pds.deployment.json", deployment)):
+    resources = ((CLAIM + ".pvc.json", claim), (CLAIM + ".pv.json", volume),
+                 ("pds.deployment.json", deployment))
+    for filename, resource in resources:
         path = RECOVERY / filename
-        if (path.exists() or path.is_symlink()) and json.loads(private_read(path))["metadata"]["uid"] != resource["metadata"]["uid"]:
-            raise SetupError("saved resource identity changed: " + filename)
-        private_write(path, json.dumps(portable(resource), indent=2) + "\n")
+        if path.exists() or path.is_symlink():
+            saved = json.loads(private_read(path))
+            metadata = saved.get("metadata") if isinstance(saved, dict) else None
+            saved_uid = metadata.get("uid") if isinstance(metadata, dict) else None
+            if saved_uid is not None and saved_uid != resource["metadata"]["uid"]:
+                raise SetupError("saved resource identity changed: " + filename)
+    record_identities(resources)
+    for filename, resource in resources:
+        private_write(RECOVERY / filename, json.dumps(portable(resource), indent=2) + "\n")
     save_secret("pds-env", resource=secret)
     return deployment
 
